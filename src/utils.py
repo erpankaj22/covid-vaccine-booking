@@ -88,8 +88,9 @@ def check_calendar_by_district(request_header, vaccine_type, location_dtls, star
 
             elif resp.status_code == 200:
                 resp = resp.json()
-                print(f"Centers available in {location['district_name']} from {start_date} as of {today.strftime('%Y-%m-%d %H:%M:%S')}: {len(resp['centers'])}")
-                options += viable_options(resp, minimum_slots, min_age_booking)
+                if 'centers' in resp:
+                    print(f"Centers available in {location['district_name']} from {start_date} as of {today.strftime('%Y-%m-%d %H:%M:%S')}: {len(resp['centers'])}")
+                    options += viable_options(resp, minimum_slots, min_age_booking)
 
             else:
                 pass
@@ -131,8 +132,9 @@ def check_calendar_by_pincode(request_header, vaccine_type, location_dtls, start
 
             elif resp.status_code == 200:
                 resp = resp.json()
-                print(f"Centers available in {location['pincode']} from {start_date} as of {today.strftime('%Y-%m-%d %H:%M:%S')}: {len(resp['centers'])}")
-                options += viable_options(resp, minimum_slots, min_age_booking)
+                if 'centers' in resp:
+                    print(f"Centers available in {location['pincode']} from {start_date} as of {today.strftime('%Y-%m-%d %H:%M:%S')}: {len(resp['centers'])}")
+                    options += viable_options(resp, minimum_slots, min_age_booking)
 
             else:
                 pass
@@ -194,12 +196,12 @@ def check_and_book(request_header, beneficiary_dtls, location_dtls, search_optio
     """
     try:
         min_age_booking = get_min_age(beneficiary_dtls)
-        vaccine_type = [beneficiary['vaccine'] for beneficiary in beneficiary_dtls][0]
 
         minimum_slots = kwargs['min_slots']
         refresh_freq = kwargs['ref_freq']
         auto_book = kwargs['auto_book']
         start_date = kwargs['start_date']
+        vaccine_type = kwargs['vaccine_type']
 
         if isinstance(start_date, int) and start_date == 2:
             start_date = (datetime.datetime.today() + datetime.timedelta(days=1)).strftime("%d-%m-%Y")
@@ -262,7 +264,7 @@ def check_and_book(request_header, beneficiary_dtls, location_dtls, search_optio
 
                 new_req = {
                     'beneficiaries': [beneficiary['beneficiary_reference_id'] for beneficiary in beneficiary_dtls],
-                    'dose': 2 if vaccine_type else 1,
+                    'dose': 2 if [beneficiary['status'] for beneficiary in beneficiary_dtls][0] == 'Partially Vaccinated' else 1,
                     'center_id' : options[choice[0] - 1]['center_id'],
                     'session_id': options[choice[0] - 1]['session_id'],
                     'slot'      : options[choice[0] - 1]['slots'][choice[1] - 1]
@@ -275,6 +277,19 @@ def check_and_book(request_header, beneficiary_dtls, location_dtls, search_optio
                 print("============> Invalid Option!")
                 os.system("pause")
                 pass
+
+
+def get_vaccine_preference():
+    print("It seems you're trying to find a slot for your first dose. Do you have a vaccine preference?")
+    preference = input("Enter 0 for No Preference, 1 for COVISHIELD, or 2 for COVAXIN. Default 0 : ")
+    preference = int(preference) if preference and int(preference) in [0, 1, 2] else 0
+
+    if preference == 1:
+        return 'COVISHIELD'
+    elif preference == 2:
+        return 'COVAXIN'
+    else:
+        return None
 
 
 def get_pincodes():
@@ -368,7 +383,8 @@ def get_beneficiaries(request_header):
                 'beneficiary_reference_id': beneficiary['beneficiary_reference_id'],
                 'name': beneficiary['name'],
                 'vaccine': beneficiary['vaccine'],
-                'age': beneficiary['age']
+                'age': beneficiary['age'],
+                'status': beneficiary['vaccination_status']
             }
             refined_beneficiaries.append(tmp)
 
@@ -389,7 +405,9 @@ def get_beneficiaries(request_header):
         beneficiary_idx = [int(idx) - 1 for idx in reqd_beneficiaries.split(',')]
         reqd_beneficiaries = [{
             'beneficiary_reference_id': item['beneficiary_reference_id'],
-            'vaccine': item['vaccine'], 'age': item['age']
+            'vaccine': item['vaccine'],
+            'age': item['age'],
+            'status': item['vaccination_status']
         } for idx, item in enumerate(beneficiaries) if idx in beneficiary_idx]
 
         print(f'Selected beneficiaries: ')
@@ -401,6 +419,7 @@ def get_beneficiaries(request_header):
         print(beneficiaries.status_code)
         print(beneficiaries.text)
         os.system("pause")
+        return []
 
 
 def get_min_age(beneficiary_dtls):
@@ -419,7 +438,7 @@ def generate_token_OTP(mobile, request_header):
     This function generate OTP and returns a new token
     """
     data = {"mobile": mobile,
-            "secret": "U2FsdGVkX1+b2/jGHLoV5kD4lpHdQ/CI7p3TnigA+6ukck6gSGrAR9aAuWeN/Nod9RrY4RaREfPITQfnqgCI6Q=="}
+            "secret": "U2FsdGVkX1/BuxAjRGqbuPlFKv/W971qHRQKB+ceQpW4gPJrWZyktw8+dgxCNNnkJAIIo8PPm1E8Aj4MoncGWA=="}
     print(f"Requesting OTP with mobile number {mobile}..")
     txnId = requests.post(url='https://cdn-api.co-vin.in/api/v2/auth/generateMobileOTP', json=data, headers=request_header)
 

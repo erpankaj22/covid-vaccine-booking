@@ -1,8 +1,10 @@
+#!/usr/bin/env python3
+
 import copy
 from collections import Counter
 import requests, sys, argparse, os, datetime
 from utils import generate_token_OTP, get_beneficiaries, check_and_book, get_districts, get_pincodes, beep, \
-    BENEFICIARIES_URL, WARNING_BEEP_DURATION
+    BENEFICIARIES_URL, WARNING_BEEP_DURATION, get_vaccine_preference
 
 
 def main():
@@ -43,10 +45,19 @@ def main():
             os.system("pause")
             sys.exit(1)
 
+        vaccine_type = vaccine_types[0]
+        if not vaccine_type:
+            print("\n================================= Vaccine Info =================================\n")
+            vaccine_type = get_vaccine_preference()
+
         print("\n================================= Location Info =================================\n")
         # get search method to use
         search_option = input("""Search by Pincode? Or by State/District? \nEnter 1 for Pincode or 2 for State/District. (Default 2) : """)
-        search_option = int(search_option) if int(search_option) in [1, 2] else 2
+
+        if not search_option or int(search_option) not in [1, 2]:
+                search_option = 2
+        else:
+            search_option = int(search_option)
 
         if search_option == 2:
             # Collect vaccination center preferance
@@ -95,7 +106,8 @@ def main():
                                          min_slots=minimum_slots,
                                          ref_freq=refresh_freq,
                                          auto_book=auto_book,
-                                         start_date=start_date)
+                                         start_date=start_date,
+                                         vaccine_type=vaccine_type)
 
             # check if token is still valid
             beneficiaries_list = requests.get(BENEFICIARIES_URL, headers=request_header)
@@ -108,18 +120,13 @@ def main():
                 print('Token is INVALID.')
                 token_valid = False
 
-                tryOTP = input('Try for a new Token? (y/n): ')
-                if tryOTP.lower() == 'y':
+                tryOTP = input('Try for a new Token? (y/n Default y): ')
+                if tryOTP.lower() == 'y' or not tryOTP:
                     if mobile:
-                        tryOTP = input(f"Try for OTP with mobile number {mobile}? (y/n) : ")
-                        if tryOTP.lower() == 'y':
-                            token = generate_token_OTP(mobile, base_request_header)
-                            token_valid = True
-                        else:
-                            token_valid = False
-                            print("Exiting")
+                        token = generate_token_OTP(mobile, base_request_header)
+                        token_valid = True
                     else:
-                        mobile = input(f"Enter 10 digit mobile number for new OTP generation? : ")
+                        mobile = input("Enter the registered mobile number: ")
                         token = generate_token_OTP(mobile, base_request_header)
                         token_valid = True
                 else:
